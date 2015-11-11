@@ -287,6 +287,7 @@ $(document).ready(function() {
 
 		$("#multiSigData").removeClass('show').addClass('hidden').fadeOut();
 		$("#multisigPubKeys .pubkey").parent().removeClass('has-error');
+		$("#multisigMandatoryPubKeys .pubkey").parent().removeClass('has-error');
 		$("#releaseCoins").parent().removeClass('has-error');
 		$("#multiSigErrorMsg").hide();
 
@@ -294,6 +295,20 @@ $(document).ready(function() {
 			$("#releaseCoins").parent().addClass('has-error');
 			$("#multiSigErrorMsg").html('<span class="glyphicon glyphicon-exclamation-sign"></span> Minimum signatures required is greater than the amount of public keys provided').fadeIn();
 			return false;
+		}
+
+		var mandatoryKeys = [];
+		if($("#multisigMandatoryPubKeys .pubkey").length > 1
+	    || $("#multisigMandatoryPubKeys .pubkey").val().length > 0) {
+
+			$.each($("#multisigMandatoryPubKeys .pubkey"), function(i,o){
+				if(coinjs.pubkeydecompress($(o).val())){
+					mandatoryKeys.push($(o).val());
+					$(o).parent().removeClass('has-error');
+				} else {
+					$(o).parent().addClass('has-error');
+				}
+			});
 		}
 
 		var keys = [];
@@ -306,9 +321,11 @@ $(document).ready(function() {
 			}
 		});
 
-		if(($("#multisigPubKeys .pubkey").parent().hasClass('has-error')==false) && $("#releaseCoins").parent().hasClass('has-error')==false){
+		if(($("#multisigPubKeys .pubkey").parent().hasClass('has-error')==false)
+	    && ($("#multisigMandatoryPubKeys .pubkey").parent().hasClass('has-error')==false)
+	    && $("#releaseCoins").parent().hasClass('has-error')==false){
 			var sigsNeeded = $("#releaseCoins option:selected").html();
-			var multisig =  coinjs.pubkeys2MultisigAddress(keys, sigsNeeded);
+			var multisig =  coinjs.pubkeysAndMandatory2MultisigAddress(mandatoryKeys, keys, sigsNeeded);
 			$("#multiSigData .address").val(multisig['address']);
 			$("#multiSigData .script").val(multisig['redeemScript']);
 			$("#multiSigData .scriptUrl").val(document.location.origin+''+document.location.pathname+'?verify='+multisig['redeemScript']+'#verify');
@@ -327,6 +344,19 @@ $(document).ready(function() {
 			$("#multisigPubKeys .glyphicon-minus:last").parent().removeClass('pubkeyAdd').addClass('pubkeyRemove');
 			$("#multisigPubKeys .pubkeyRemove").unbind("");
 			$("#multisigPubKeys .pubkeyRemove").click(function(){
+				$(this).parent().fadeOut().remove();
+			});
+		}
+	});
+
+	$("#multisigMandatoryPubKeys .pubkeyAdd").click(function(){
+		if($("#multisigMandatoryPubKeys .pubkeyRemove").length<14){
+			var clone = '<div class="form-horizontal">'+$(this).parent().html()+'</div>';
+			$("#multisigMandatoryPubKeys").append(clone);
+			$("#multisigMandatoryPubKeys .glyphicon-plus:last").removeClass('glyphicon-plus').addClass('glyphicon-minus');
+			$("#multisigMandatoryPubKeys .glyphicon-minus:last").parent().removeClass('pubkeyAdd').addClass('pubkeyRemove');
+			$("#multisigMandatoryPubKeys .pubkeyRemove").unbind("");
+			$("#multisigMandatoryPubKeys .pubkeyRemove").click(function(){
 				$(this).parent().fadeOut().remove();
 			});
 		}
@@ -1161,7 +1191,7 @@ $(document).ready(function() {
 				$("#signedData .txSize").html(t.size());
 				$("#signedData").removeClass('hidden').fadeIn();
 			} catch(e) {
-				// console.log(e);
+				console.log(e);
 			}
 		} else {
 			$("#signedDataError").removeClass('hidden');
@@ -1260,7 +1290,7 @@ $(document).ready(function() {
 	});
 
 	for(i=1;i<3;i++){
-		$(".pubkeyAdd").click();
+		$("#multisigPubKeys .pubkeyAdd").click();
 	}
 
 	validateOutputAmount();

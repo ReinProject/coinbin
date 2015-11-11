@@ -135,6 +135,45 @@
 		return {'address':address, 'redeemScript':redeemScript};
 	}
 
+	/* new multisig address with some mandatory signment, provide teh mandatory pubkeys, the multisig pubkeys
+	   AND required signatures (of the multisig pubkeys) to release the funds */
+	coinjs.pubkeysAndMandatory2MultisigAddress = function(mandatorykeys, pubkeys, required) {
+		var s = coinjs.script();
+		for(var i = 0; i < mandatorykeys.length; ++i) {
+			s.writeBytes(Crypto.util.hexToBytes(mandatorykeys[i]));
+			s.writeOp(173); // OP_CHECKSIGVERIFY
+		}
+		s.writeOp(81 + (required*1) - 1); //OP_1
+		for (var i = 0; i < pubkeys.length; ++i) {
+			s.writeBytes(Crypto.util.hexToBytes(pubkeys[i]));
+		}
+		s.writeOp(81 + pubkeys.length - 1); //OP_1 
+		s.writeOp(174); //OP_CHECKMULTISIG
+		var x = ripemd160(Crypto.SHA256(s.buffer, {asBytes: true}), {asBytes: true});
+		x.unshift(coinjs.multisig);
+		var r = x;
+		r = Crypto.SHA256(Crypto.SHA256(r, {asBytes: true}), {asBytes: true});
+		var checksum = r.slice(0,4);
+		var redeemScript = Crypto.util.bytesToHex(s.buffer);
+		var address = coinjs.base58encode(x.concat(checksum));
+		return {'address':address, 'redeemScript':redeemScript};
+	}
+
+	coinjs.addressFromRedeemScript = function(buffer) {
+		if(typeof buffer == "string"){
+			buffer = Crypto.util.hexToBytes(buffer);
+		}
+
+		var x = ripemd160(Crypto.SHA256(buffer, {asBytes: true}), {asBytes: true});
+		x.unshift(coinjs.multisig);
+		var r = x;
+		r = Crypto.SHA256(Crypto.SHA256(r, {asBytes: true}), {asBytes: true});
+		var checksum = r.slice(0,4);
+		//var redeemScript = Crypto.util.bytesToHex(buffer);
+		var address = coinjs.base58encode(x.concat(checksum));
+		return address;
+	}
+
 	/* provide a privkey and return an WIF  */
 	coinjs.privkey2wif = function(h){
 		var r = Crypto.util.hexToBytes(h);
@@ -641,14 +680,31 @@
 				var s = coinjs.script(Crypto.util.hexToBytes(script));
 				if((s.chunks.length>=3) && s.chunks[s.chunks.length-1] == 174){//OP_CHECKMULTISIG
 					r = {};
-					r.signaturesRequired = s.chunks[0]-80;
+
+					var npubs = s.chunks[s.chunks.length-2] - 80;
+					var nsigs = s.chunks[s.chunks.length-3-npubs] - 80;
+					r.signaturesRequired = nsigs;
+
 					var pubkeys = [];
-					for(var i=1;i<s.chunks.length-2;i++){
-						pubkeys.push(Crypto.util.bytesToHex(s.chunks[i]));
+					for(var i=1;i<=npubs;i++){
+						var key = s.chunks[(s.chunks.length-3-npubs) + i];
+						pubkeys.push(Crypto.util.bytesToHex(key));
 					}
+
+					var mandatorykeys = [];
+					if(s.chunks.length > (3 + npubs) && s.chunks[1] == 173){// OP_CHECKSIGVERIFY
+						var nmandatory = (s.chunks.length - (3 + npubs)) / 2;
+						for(var i=0; i < s.chunks.length-3-npubs; i += 2){
+							var key = s.chunks[i];
+							mandatorykeys.push(Crypto.util.bytesToHex(key));
+						}
+					}
+
 					r.pubkeys = pubkeys;
-					var multi = coinjs.pubkeys2MultisigAddress(pubkeys, r.signaturesRequired);
+					r.mandatorykeys = mandatorykeys;
+					var multi = coinjs.pubkeysAndMandatory2MultisigAddress(mandatorykeys, pubkeys, nsigs);
 					r.address = multi['address'];
+					//r.address = coinjs.addressFromRedeemScript(s.buffer);
 				}
 			} catch(e) {
 				// console.log(e);
@@ -904,7 +960,9 @@
 				} else if (this.ins[index].script.chunks[0]==0 && this.ins[index].script.chunks[this.ins[index].script.chunks.length-1][this.ins[index].script.chunks[this.ins[index].script.chunks.length-1].length-1]==174) { // OP_CHECKMULTISIG
 					// multisig script, with signature(s) included
 					return {'type':'multisig', 'signed':'true', 'signatures':this.ins[index].script.chunks.length-2, 'script': Crypto.util.bytesToHex(this.ins[index].script.chunks[this.ins[index].script.chunks.length-1])};
-				} else if (this.ins[index].script.chunks[0]>=80 && this.ins[index].script.chunks[this.ins[index].script.chunks.length-1]==174) { // OP_CHECKMULTISIG
+				} else if (this.ins[index].script.chunks.length >= 3
+				       &&  ((this.ins[index].script.chunks[1] == 173 && this.ins[index].script.chunks[0] instanceof Array) || this.ins[index].script.chunks[0]>=80)// OP_CHECKSIGVERIFY
+				       &&  this.ins[index].script.chunks[this.ins[index].script.chunks.length-1]==174) { // OP_CHECKMULTISIG
 					// multisig script, without signature!
 					return {'type':'multisig', 'signed':'false', 'signatures':0, 'script': Crypto.util.bytesToHex(this.ins[index].script.buffer)};
 				} else if (this.ins[index].script.chunks.length==0) {
@@ -1052,12 +1110,44 @@
 		/* sign a multisig input */
 		r.signmultisig = function(index, wif){
 
+/*
 			function scriptListPubkey(redeemScript){
 				var r = {};
-				for(var i=1;i<redeemScript.chunks.length-2;i++){
-					r[i] = Crypto.util.hexToBytes(coinjs.pubkeydecompress(Crypto.util.bytesToHex(redeemScript.chunks[i])));
+
+				var npubs = redeemScript.chunks[redeemScript.chunks.length-2] - 80;
+
+				for(var i=1;i<=npubs;i++){
+					var key = redeemScript.chunks[(redeemScript.chunks.length-3-npubs) + i];
+					r[i] = Crypto.util.hexToBytes(coinjs.pubkeydecompress(Crypto.util.bytesToHex(key)));
 				}
 				return r;
+			}
+*/
+
+			function scriptListKeys(redeemScript){
+
+				var r = {};
+				var s = redeemScript;
+
+				var npubs = s.chunks[s.chunks.length-2] - 80;
+				var nsigs = s.chunks[s.chunks.length-3-npubs] - 80;
+
+				var pubkeys = {};
+				for(var i=1;i<=npubs;i++){
+					var key = s.chunks[(s.chunks.length-3-npubs) + i];
+					pubkeys[i] = Crypto.util.hexToBytes(coinjs.pubkeydecompress(Crypto.util.bytesToHex(key)));
+				}
+
+				var mandatorykeys = {};
+				if(s.chunks.length > (3 + npubs) && s.chunks[1] == 173){// OP_CHECKSIGVERIFY
+					var nmandatory = (s.chunks.length - (3 + npubs)) / 2;
+					for(var i=0; i < s.chunks.length-3-npubs; i += 2){
+						var key = s.chunks[i];
+						mandatorykeys[i+1] = Crypto.util.hexToBytes(coinjs.pubkeydecompress(Crypto.util.bytesToHex(key)));
+					}
+				}
+
+				return {'pubkeys': pubkeys, 'mandatorykeys': mandatorykeys};
 			}
 	
 			function scriptListSigs(scriptSig){
@@ -1081,7 +1171,9 @@
 				s.writeBytes(signature);
 
 			}  else if (this.ins[index].script.chunks[0]==0 && this.ins[index].script.chunks[this.ins[index].script.chunks.length-1][this.ins[index].script.chunks[this.ins[index].script.chunks.length-1].length-1]==174){
-				var pubkeyList = scriptListPubkey(coinjs.script(redeemScript));
+				var pkeysList = scriptListKeys(coinjs.script(redeemScript));
+				var pubkeyList = pkeysList.pubkeys;
+				var mandatorykeyList = pkeysList.mandatorykeys;
 				var sigsList = scriptListSigs(this.ins[index].script);
 				sigsList[coinjs.countObject(sigsList)+1] = signature;
 
@@ -1093,6 +1185,13 @@
 					}
 				}
 
+				for(x in mandatorykeyList){
+					for(y in sigsList){
+						if(coinjs.verifySignature(sighash, sigsList[y], mandatorykeyList[x])){
+							s.writeBytes(sigsList[y]);
+						}
+					}
+				}
 			}
 
 			s.writeBytes(redeemScript);
