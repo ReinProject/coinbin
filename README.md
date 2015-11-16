@@ -1,11 +1,15 @@
 coinbin
 =======
 
-A Open Source Browser Based Bitcoin Wallet. Version 1.2 beta by OutCast3k
+A Open Source Browser Based Bitcoin Wallet. Based on coinb.in by OutCast3k, with mods by thelink2012
 
-Live version available at http://coinb.in/ or http://4zpinp6gdkjfplhk.onion
+This version includes Mandatory Multisig which is multisig where one or more keys must sign for 
+redemption. Using https://blockchain.info/pushtx or another service to broadcast a mandatory 
+multisig transaction.
 
-Github URL: https://github.com/OutCast3k/coinbin/
+Live version available at <coming soon>
+
+Github URL: https://github.com/ReinProject/coinbin/
 
 Coinb.in supports a number of key features such as: 
 
@@ -28,4 +32,4 @@ Coinb.in supports a number of key features such as:
 - HD (bip32) support
 - Supports altcoins such as litecoin
 
-Donate to 1CWHWkTWaq1K5hevimJia3cyinQsrgXUvg to see more development!
+Donate to 1CWHWkTWaq1K5hevimJia3cyinQsrgXUvg (Outkast3k's address) to see more development!
