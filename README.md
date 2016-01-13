@@ -7,7 +7,7 @@ This version includes Mandatory Multisig which is multisig where one or more key
 redemption. Using https://blockchain.info/pushtx or another service to broadcast a mandatory 
 multisig transaction.
 
-Live version available at <coming soon>
+Live version available at \<coming soon\>
 
 Github URL: https://github.com/ReinProject/coinbin/
 
