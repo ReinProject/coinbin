@@ -3,9 +3,7 @@ coinbin
 
 A Open Source Browser Based Bitcoin Wallet. Based on coinb.in by OutCast3k, with mods by thelink2012
 
-This version includes Mandatory Multisig which is multisig where one or more keys must sign for 
-redemption. Using https://blockchain.info/pushtx or another service to broadcast a mandatory 
-multisig transaction.
+This version includes Mandatory Multisig where one or more keys are required to sign for redemption as opposed to all keys holding equal power. Using https://blockchain.info/pushtx or another service to broadcast a mandatorymultisig transaction. This feature was developed for Rein, the decentralized professional services market.
 
 Live version available at \<coming soon\>
 
